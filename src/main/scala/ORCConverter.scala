@@ -22,14 +22,14 @@ object ORCConverter {
     val sc = spark.sparkContext
 
     val yearList = Array[Int](2016)
-    val stationIDList = Array[String]("010010-99999","010014-99999","010020-99999","010030-99999","010060-99999")
+    val stationIDList = Array[String]("010010-99999")
 
-    val validInputDFArray = readRawDataFiles(spark, sc, yearList, stationIDList)
-    println("Count on valid input dataframes = " + validInputDFArray.size)
+    val validInputPathDFArray = readRawDataFiles(spark, sc, yearList, stationIDList)
+    println("Count on valid input dataframes = " + validInputPathDFArray.size)
 
-    filterInvalidData(validInputDFArray)
+    val filteredDFArray  = filterInvalidData(spark, validInputPathDFArray)
 
-    //writeToORC(spark, validInputDFArray)
+    writeToORC(spark, filteredDFArray)
 
     spark.stop()
   }
@@ -116,14 +116,70 @@ object ORCConverter {
     Row.fromSeq(columnArray)
   }
 
-  case class DataUnit(year: Int, moth: Int, day: Int, hour: Int, temperature: Int, dew: Int, seaLevel: Int,
-                      windDirection: Int, windSpeed: Int, skyCoverage: Int, oneHrPrep: Int, sixHrPrep: Int)
+  case class DataUnitTry(year: Try[Int], month: Try[Int], day: Try[Int], hour: Try[Int], temperature: String,
+                         dew: String, seaLevel: String, windDirection: String, windSpeed: String, skyCoverage: String,
+                         oneHrPrep: String, sixHrPrep: String, usaf: String, wban: String)
+  case class DataUnit(year: Int, month: Int, day: Int, hour: Int, temperature: String,
+                         dew: String, seaLevel: String, windDirection: String, windSpeed: String, skyCoverage: String,
+                         oneHrPrep: String, sixHrPrep: String, usaf: String, wban: String)
 
-  def filterInvalidData(validInputDFArray: Array[DataFrame]) = {
+  <!-- filter records with invalid data in year, month, day and hour column
+    return an Array[DataFrame] with type preserved on columns-->
+  def filterInvalidData(spark: SparkSession, validInputPathDFArray: Array[DataFrame]):Array[DataFrame] = {
+    var filteredDFArray = ArrayBuffer[DataFrame]()
+    for(inputDF <- validInputPathDFArray){
+      val inputRDD = inputDF.rdd
+      <!--
+      Convert Dataframe[String] to RDD[DataUnit]
+      this conversion is using Try monads, will help use filter bad data gracefully
+      filter only on year, month, day and hour
+      -->
+      val dataUnitTryRDD = inputRDD.map(s => DataUnitTry(Try(s.getString(0).toInt), Try(s.getString(1).toInt),
+        Try(s.getString(2).toInt), Try(s.getString(3).toInt), s.getString(4), s.getString(5), s.getString(6),
+        s.getString(7), s.getString(8), s.getString(9), s.getString(10), s.getString(11), s.getString(12),
+        s.getString(13)))
+      println(dataUnitTryRDD.take(5).foreach(println))
+      <!-- filter on year column
+      year has to be a valid Int -->
+      val dataUnitFilterTryRDD = dataUnitTryRDD.filter(dataUnit => dataUnit.year match {
+        case Success(yearInt) => true
+        case Failure(exception) => false
+      })
+        //filter on month column, should be between 1 an 12
+        .filter(dataUnit => dataUnit.month match {
+        case Success(monthInt) =>{
+          if(monthInt > 0 && monthInt <= 12) true
+          else false
+        }
+        case Failure(exception) => false
+      })
+        //day filter, must be a valid int and less than or equal to 31
+        .filter(dataUnit => dataUnit.day match {
+          case Success(dayInt) => {
+            if(dayInt > 0 && dayInt <= 31) true
+            else false
+          }
+          case Failure(exception) => false
+        })
+        //hour filter, value should be int and between 0 and 23
+        .filter(dataUnit => dataUnit.hour match {
+          case Success(hourInt) => {
+            if(hourInt >= 0 && hourInt <= 23) true
+            else false
+          }
+          case Failure(exception) => false
+        })
+      println(dataUnitFilterTryRDD.take(5).foreach(println))
 
-    for(x <- validInputDFArray){
-
+      val filteredDF = spark.createDataFrame(dataUnitFilterTryRDD
+        .map(x => DataUnit(x.year.get, x.month.get, x.day.get, x.hour.get, x.temperature,
+          x.dew, x.seaLevel, x.windDirection, x.windSpeed, x.skyCoverage, x.oneHrPrep, x.sixHrPrep, x.usaf,
+          x.wban)))
+        .toDF("year", "month", "day", "hour", "temperature",
+        "dew", "seaLevel", "windDirection", "windSpeed", "skyCoverage", "oneHrPrep", "sixHrPrep", "usaf", "wban")
+      filteredDFArray += filteredDF
     }
+    filteredDFArray.toArray
   }
 
   def writeToORC(spark: SparkSession, stationDfArray: Array[DataFrame]) = {
