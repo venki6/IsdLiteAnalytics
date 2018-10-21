@@ -177,15 +177,17 @@ object ORCConverter {
           x.wban)))
         .toDF("year", "month", "day", "hour", "temperature",
         "dew", "seaLevel", "windDirection", "windSpeed", "skyCoverage", "oneHrPrep", "sixHrPrep", "usaf", "wban")
+
+      <!-- add filtered DF to buffered Array -->
       filteredDFArray += filteredDF
     }
     filteredDFArray.toArray
   }
 
-  def writeToORC(spark: SparkSession, stationDfArray: Array[DataFrame]) = {
-    for(i <- 0 until stationDfArray.length){
-
-      stationDfArray(i).write
+  <!-- write DataFrame to ORC-->
+  def writeToORC(spark: SparkSession, filteredDFArray: Array[DataFrame]) = {
+    for(i <- filteredDFArray){
+      i.write
         .option("compression","none") // disabled compression, file size is small
         .mode(SaveMode.Append) // Append mode is crucial to enable scaling on input station range
         .partitionBy("year", "usaf") // easy for both year and per-station aggregations
