@@ -1,4 +1,4 @@
-name := "IsdAnalytics"
+name := "IsdLiteAnalytics"
 
 version := "0.1"
 
