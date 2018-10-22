@@ -103,7 +103,7 @@ object YearlyAnalytics {
     spark.catalog.listTables().show()
 
     for(orcYearDF <- orcDFArray; i <- yearRange){
-      orcYearDF.printSchema()
+      orcYearDF.createOrReplaceTempView("orcYearDF")
       var yearString = i.toString
       val absoluteYearDS = orcYearDF
         //map function to convert String temperature to Int,
@@ -133,7 +133,7 @@ object YearlyAnalytics {
 
       absoluteYearDS.createOrReplaceTempView("abtYearDF")
 //    spark.sql("select * from (select *, rank() over (partition by usaf order by temperature desc) as rank from orcYearDF) ranked_yearDF where ranked_yearDF.rank = 1").show()
-      spark.sql(s"select $yearString, usaf, max(temperature) as max_temperature from orcYearDF group by usaf").show()
+      spark.sql(s"select $yearString, usaf, max(temperature) as max_temperature from abtYearDF group by usaf").show()
     }
 
   }
