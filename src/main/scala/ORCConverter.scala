@@ -21,8 +21,9 @@ object ORCConverter {
       .getOrCreate()
     val sc = spark.sparkContext
 
-    val yearList = Array[Int](2016)
-    val stationIDList = Array[String]("010010-99999")
+    val yearList = Array[Int](2016, 2017, 2018)
+    val stationIDList = Array[String]("010010-99999", "010014-99999","010020-99999","010030-99999",
+        "010060-99999")
 
     val validInputPathDFArray = readRawDataFiles(spark, sc, yearList, stationIDList)
     println("Count on valid input dataframes = " + validInputPathDFArray.size)
